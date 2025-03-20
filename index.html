@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>行业新闻搜索</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>行业新闻搜索</h1>
+        <div class="industry-box">
+            <div class="checkbox-group">
+                <label><input type="checkbox" name="industry" value="投融资"> 投融资</label>
+                <label><input type="checkbox" name="industry" value="硬科技"> 硬科技</label>
+                <label><input type="checkbox" name="industry" value="大健康"> 大健康</label>
+                <label><input type="checkbox" name="industry" value="大消费"> 大消费</label>
+                <label><input type="checkbox" name="industry" value="汽车"> 汽车</label>
+                <label><input type="checkbox" name="industry" value="数字化"> 数字化</label>
+                <label><input type="checkbox" name="industry" value="新能源"> 新能源</label>
+            </div>
+            <div class="custom-industry">
+                <input type="text" id="customIndustry" placeholder="输入其他行业（可选）">
+            </div>
+        </div>
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="请输入搜索关键词">
+            <button id="searchButton">搜索</button>
+        </div>
+        <div id="results" class="results-container"></div>
+        <div class="load-more">
+            <button id="loadMoreButton" style="display: none;">加载更多</button>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
