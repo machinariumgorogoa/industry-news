@@ -14,21 +14,52 @@ const INDUSTRY_KEYWORDS = {
     '新能源': 'new energy OR renewable OR 新能源 OR 可再生能源'
 };
 
-function getSelectedIndustries() {
-    const checkedBoxes = document.querySelectorAll('input[name="industry"]:checked');
-    const industries = Array.from(checkedBoxes).map(box => box.value);
+function calculateImportance(article) {
+    let score = 5;
+    const title = article.title.toLowerCase();
+    const description = (article.description || '').toLowerCase();
     
-    const customIndustry = document.getElementById('customIndustry').value.trim();
-    if (customIndustry) {
-        industries.push(customIndustry);
+    const keywords = ['重要', '突破', '重大', '首次', '创新', '独家', '最新', '紧急'];
+    keywords.forEach(keyword => {
+        if (title.includes(keyword)) score += 1;
+        if (description.includes(keyword)) score += 0.5;
+    });
+    
+    if (title.length > 30) score += 1;
+    if (description && description.length > 100) score += 1;
+    
+    const importantSources = ['新华社', '人民日报', '央视新闻', '中国证券报'];
+    if (importantSources.some(source => article.source.name.includes(source))) {
+        score += 1;
     }
     
-    return industries;
+    return Math.min(Math.max(score, 1), 10);
+}
+
+function generateSummary(text) {
+    if (!text) return '';
+    const sentences = text.split(/[。！？.!?]/);
+    let summary = sentences[0] || '';
+    return summary.length > 50 ? summary.substring(0, 47) + '...' : summary;
+}
+
+function getSelectedIndustries() {
+    const checkedBoxes = document.querySelectorAll('input[name="industry"]:checked');
+    return Array.from(checkedBoxes).map(box => box.value);
 }
 
 function formatDate(dateString) {
     const date = new Date(dateString);
     return date.toLocaleDateString('zh-CN');
+}
+
+function resetForm() {
+    document.querySelectorAll('input[name="industry"]').forEach(checkbox => checkbox.checked = false);
+    document.getElementById('selectAll').checked = false;
+    document.getElementById('searchInput').value = '';
+    document.getElementById('results').innerHTML = '';
+    document.getElementById('loadMoreButton').style.display = 'none';
+    currentPage = 1;
 }
 
 async function searchNewsForIndustry(industry, page = 1) {
@@ -56,14 +87,18 @@ async function searchNewsForIndustry(industry, page = 1) {
         if (data.status === 'ok') {
             return {
                 industry: industry,
-                articles: data.articles.map(article => ({
-                    title: article.title,
-                    url: article.url,
-                    source: article.source.name,
-                    source_url: article.url,
-                    pubDate: article.publishedAt,
-                    description: article.description || ''
-                })),
+                articles: data.articles.map(article => {
+                    const importance = calculateImportance(article);
+                    return {
+                        title: article.title,
+                        url: article.url,
+                        source: article.source.name,
+                        source_url: article.url,
+                        pubDate: article.publishedAt,
+                        description: generateSummary(article.description || ''),
+                        importance: importance
+                    };
+                }),
                 hasMore: data.totalResults > page * 20
             };
         }
@@ -106,12 +141,22 @@ async function searchNews(isLoadMore = false) {
     }
 }
 
+function sortArticles(articles, method) {
+    return [...articles].sort((a, b) => {
+        if (method === 'importance') {
+            return b.dataset.importance - a.dataset.importance;
+        } else {
+            return new Date(b.dataset.date) - new Date(a.dataset.date);
+        }
+    });
+}
+
 function displayResults(results, isLoadMore) {
     const resultsContainer = document.getElementById('results');
     
     if (!isLoadMore) {
         resultsContainer.innerHTML = '';
-        resultsContainer.setAttribute('data-columns', results.length);
+        resultsContainer.style.gridTemplateColumns = `repeat(${results.length}, 1fr)`;
     }
 
     results.forEach(result => {
@@ -121,34 +166,79 @@ function displayResults(results, isLoadMore) {
             industrySection.className = 'industry-section';
             industrySection.setAttribute('data-industry', result.industry);
             industrySection.innerHTML = `
+                <div class="sort-control">
+                    <select class="sort-selector" data-industry="${result.industry}">
+                        <option value="date">按日期排序</option>
+                        <option value="importance">按重要度排序</option>
+                    </select>
+                </div>
                 <h2>${result.industry}行业新闻</h2>
                 <div class="news-list"></div>
+                <button class="load-more-button" style="display: none;">加载更多</button>
             `;
             resultsContainer.appendChild(industrySection);
+            
+            const selector = industrySection.querySelector('.sort-selector');
+            selector.addEventListener('change', (e) => {
+                const method = e.target.value;
+                const newsList = industrySection.querySelector('.news-list');
+                const articles = Array.from(newsList.children);
+                const sortedArticles = sortArticles(articles, method);
+                newsList.innerHTML = '';
+                sortedArticles.forEach(article => newsList.appendChild(article));
+            });
         } else {
             industrySection = resultsContainer.querySelector(`[data-industry="${result.industry}"]`);
         }
         
         const newsList = industrySection.querySelector('.news-list');
+        const loadMoreBtn = industrySection.querySelector('.load-more-button');
         
         result.articles.forEach(article => {
             const newsItem = document.createElement('div');
             newsItem.className = 'news-item';
+            newsItem.dataset.importance = article.importance;
+            newsItem.dataset.date = article.pubDate;
+            
             newsItem.innerHTML = `
                 <h3><a href="${article.url}" target="_blank">${article.title}</a></h3>
                 <div class="news-meta">
-                    <span>来源: <a href="${article.source_url}" target="_blank">${article.source}</a></span>
-                    <span>发布日期: ${formatDate(article.pubDate)}</span>
+                    <span>来源：<a href="${article.source_url}" target="_blank">${article.source}</a></span>
+                    <span>发布日期：${formatDate(article.pubDate)}</span>
+                    <span>重要度：${article.importance.toFixed(1)}</span>
                 </div>
                 <p>${article.description}</p>
             `;
             newsList.appendChild(newsItem);
         });
+
+        loadMoreBtn.style.display = result.hasMore ? 'block' : 'none';
+        loadMoreBtn.onclick = () => searchNews(true);
     });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    const selectAllCheckbox = document.getElementById('selectAll');
+    const industryCheckboxes = document.querySelectorAll('input[name="industry"]');
+
+    selectAllCheckbox.addEventListener('change', (e) => {
+        industryCheckboxes.forEach(checkbox => {
+            checkbox.checked = e.target.checked;
+        });
+    });
+
+    industryCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            const allChecked = Array.from(industryCheckboxes).every(cb => cb.checked);
+            const someChecked = Array.from(industryCheckboxes).some(cb => cb.checked);
+            selectAllCheckbox.checked = allChecked;
+            selectAllCheckbox.indeterminate = someChecked && !allChecked;
+        });
+    });
+
     document.getElementById('searchButton').addEventListener('click', () => searchNews(false));
+    document.getElementById('refreshButton').addEventListener('click', () => searchNews(false));
+    document.getElementById('resetButton').addEventListener('click', resetForm);
     document.getElementById('loadMoreButton').addEventListener('click', () => searchNews(true));
     document.getElementById('searchInput').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') searchNews(false);
